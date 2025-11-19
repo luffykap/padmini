@@ -1,0 +1,126 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is verified
+    function isVerified() {
+      return isSignedIn() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.verified == true;
+    }
+    
+    // Helper function to check if user owns the resource
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    // Helper function to check same college
+    function isSameCollege(userId) {
+      let requestingUserCollege = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.college;
+      let targetUserCollege = get(/databases/$(database)/documents/users/$(userId)).data.college;
+      return requestingUserCollege == targetUserCollege;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      // Anyone authenticated can create their profile
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      
+      // Users can read and update their own profile
+      allow read, update: if isOwner(userId);
+      
+      // Verified users from same college can read other profiles (for matching)
+      allow read: if isVerified() && isSameCollege(userId);
+    }
+    
+    // OTP collection
+    match /otps/{userId} {
+      // Users can create and read their own OTP
+      allow create, read: if isSignedIn() && request.auth.uid == userId;
+      
+      // Users can update their own OTP (for regeneration)
+      allow update: if isOwner(userId);
+    }
+    
+    // Help requests collection
+    match /requests/{requestId} {
+      // Verified users can create requests
+      allow create: if isVerified();
+      
+      // Request creator can read and update their own requests
+      allow read, update: if isSignedIn() && 
+                             resource.data.requesterId == request.auth.uid;
+      
+      // Verified users from same college can read active requests
+      allow read: if isVerified() && 
+                    resource.data.status in ['open', 'accepted'] &&
+                    isSameCollege(resource.data.requesterId);
+      
+      // Verified users can accept requests (update status)
+      allow update: if isVerified() && 
+                      (resource.data.status == 'open' || 
+                       resource.data.acceptedBy == request.auth.uid);
+    }
+    
+    // Chats collection
+    match /chats/{chatId} {
+      // Participants can create chats
+      allow create: if isVerified();
+      
+      // Only chat participants can read
+      allow read: if isSignedIn() && 
+                    (resource.data.userAId == request.auth.uid || 
+                     resource.data.userBId == request.auth.uid);
+      
+      // Participants can update chat metadata
+      allow update: if isSignedIn() && 
+                      (resource.data.userAId == request.auth.uid || 
+                       resource.data.userBId == request.auth.uid);
+      
+      // Messages subcollection
+      match /messages/{messageId} {
+        // Chat participants can create messages
+        allow create: if isSignedIn() && 
+                        (get(/databases/$(database)/documents/chats/$(chatId)).data.userAId == request.auth.uid || 
+                         get(/databases/$(database)/documents/chats/$(chatId)).data.userBId == request.auth.uid);
+        
+        // Chat participants can read messages
+        allow read: if isSignedIn() && 
+                      (get(/databases/$(database)/documents/chats/$(chatId)).data.userAId == request.auth.uid || 
+                       get(/databases/$(database)/documents/chats/$(chatId)).data.userBId == request.auth.uid);
+        
+        // Message sender can update/delete their message
+        allow update, delete: if isSignedIn() && resource.data.senderId == request.auth.uid;
+      }
+    }
+    
+    // Notifications collection
+    match /notifications/{notificationId} {
+      // System can create notifications
+      allow create: if isSignedIn();
+      
+      // Users can read their own notifications
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      // Users can mark their notifications as read
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      // Users can delete their notifications
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+    
+    // Reports collection (for safety)
+    match /reports/{reportId} {
+      // Verified users can create reports
+      allow create: if isVerified();
+      
+      // Only admins can read reports (in production, add admin check)
+      allow read: if isSignedIn();
+    }
+  }
+}

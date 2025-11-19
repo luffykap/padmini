@@ -164,11 +164,11 @@ export class ChatService {
 
       // Send completion message
       await this.sendMessage(chatRoomId, 'system', 
-        '✅ Request marked as completed. This chat will now be deleted for privacy.',
+        '✅ Request marked as completed! This chat will remain open for 5 minutes, then auto-delete for privacy.',
         'completion'
       );
 
-      // Delete all messages after a short delay (3 seconds)
+      // Delete all messages after 5 minutes (300000 milliseconds)
       setTimeout(async () => {
         try {
           const messagesQuery = query(
@@ -183,11 +183,11 @@ export class ChatService {
           // Delete the chat room itself
           await deleteDoc(doc(db, 'chats', chatRoomId));
           
-          console.log('Chat room and messages deleted successfully');
+          console.log('✅ Chat room and messages deleted successfully after 5 minutes');
         } catch (error) {
-          console.error('Error deleting chat data:', error);
+          console.error('❌ Error deleting chat data:', error);
         }
-      }, 3000);
+      }, 300000); // 5 minutes = 300000 milliseconds
 
     } catch (error) {
       console.error('Error completing chat room:', error);

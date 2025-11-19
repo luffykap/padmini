@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, Platform, Alert } from 'react-native';
 import { 
   Button, 
@@ -12,50 +12,44 @@ import {
 import { theme } from '../theme/theme';
 import { RequestService } from '../services/RequestService';
 import { ChatService } from '../services/ChatService';
-import { AuthContext } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function HelpResponseScreen({ navigation, route }) {
-  // Create a persistent test user ID that doesn't change during the session
-  const [persistentUser] = useState(() => {
-    // Try to get existing user ID from sessionStorage first
-    const existingUserId = typeof window !== 'undefined' ? 
-      window.sessionStorage?.getItem('pad-mini-user-id') : null;
-    
-    if (existingUserId) {
-      return {
-        uid: existingUserId,
-        name: `User ${existingUserId.slice(-4)}`,
-        college: 'bit-bangalore.edu.in'
-      };
-    }
-    
-    // Generate new user ID and store it
-    const newUserId = `test-user-${Math.random().toString(36).substr(2, 9)}`;
-    if (typeof window !== 'undefined' && window.sessionStorage) {
-      window.sessionStorage.setItem('pad-mini-user-id', newUserId);
-    }
-    
-    return {
-      uid: newUserId,
-      name: `User ${newUserId.slice(-4)}`,
-      college: 'bit-bangalore.edu.in'
-    };
-  });
-
-  // Safely access AuthContext with fallback to persistent test user
-  let user = persistentUser; // Use persistent test user for sync testing
-  try {
-    const authContext = useContext(AuthContext);
-    if (authContext?.user) {
-      user = authContext.user;
-    }
-  } catch (error) {
-    console.log('AuthContext not available in HelpResponseScreen, using persistent test user for sync testing');
-  }
+  // Use proper AuthContext hook
+  const { user, userProfile } = useAuth();
+  
+  // Create helper user object with proper data
+  const currentUser = user ? {
+    uid: user.uid,
+    name: userProfile?.fullName || user.displayName || `User ${user.uid.slice(-4)}`,
+    college: userProfile?.college || 'bit-bangalore.edu.in',
+    email: user.email
+  } : null;
   
   const { requestId } = route.params;
   const [message, setMessage] = useState('');
   const [responding, setResponding] = useState(false);
+
+  // Redirect if no user is logged in
+  if (!currentUser) {
+    return (
+      <View style={styles.container}>
+        <Card style={styles.requestCard}>
+          <Card.Content>
+            <Title>Authentication Required</Title>
+            <Paragraph>You must be logged in to respond to help requests.</Paragraph>
+            <Button 
+              mode="contained" 
+              onPress={() => navigation.navigate('Welcome')}
+              style={{ marginTop: 16 }}
+            >
+              Go to Login
+            </Button>
+          </Card.Content>
+        </Card>
+      </View>
+    );
+  }
 
   // TODO: Load actual request data from Firebase
   const requestData = {
@@ -150,33 +144,37 @@ export default function HelpResponseScreen({ navigation, route }) {
         console.error('localStorage sync failed:', localError);
       }
 
-      if (user) {
-        // Accept the request through Firebase if user is authenticated
-        const chatRoom = await RequestService.acceptRequest(requestId, user.uid, message);
-      } else {
-        // Guest mode - simulate acceptance
-        console.log('Guest mode: Simulating request acceptance', { requestId, message });
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate delay
+      if (!currentUser) {
+        throw new Error('You must be logged in to accept requests');
       }
+
+      // Accept the request through Firebase
+      console.log('🔄 Accepting request with user:', currentUser.uid);
+      const chatRoom = await RequestService.acceptRequest(requestId, currentUser.uid, message);
+      console.log('✅ Request accepted, chat room created:', chatRoom.id);
       
       setResponding(false);
+      
+      // Show success message and redirect to Home
       Alert.alert(
         'Help Accepted!',
         'You\'ve accepted this request. A private chat has been created to coordinate.',
         [
           {
-            text: 'Open Chat',
-            onPress: () => navigation.navigate('Chat', { 
-              requestId,
-              chatRoomId: chatRoomId,
-              isHelper: true 
-            })
+            text: 'OK',
+            onPress: () => navigation.navigate('Home')
           }
-        ]
+        ],
+        { cancelable: false }
       );
+      
+      // Auto-redirect to Home after 2 seconds
+      setTimeout(() => {
+        navigation.navigate('Home');
+      }, 2000);
     } catch (error) {
       setResponding(false);
-      console.error('Error accepting request:', error);
+      console.error('❌ Error accepting request:', error);
       Alert.alert('Error', error.message || 'Failed to accept request. Please try again.');
     }
   };

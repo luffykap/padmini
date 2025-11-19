@@ -1,0 +1,24 @@
+sequenceDiagram
+  participant U as User
+  participant App as Pad-Mini App
+  participant Auth as Firebase Auth
+  participant FS as Firestore
+  participant Email as EmailJS (optional)
+
+  U->>App: Register with college email
+  App->>Auth: createUserWithEmailAndPassword
+  Auth-->>App: uid
+  App->>FS: users/{uid} (profile draft)
+  App->>FS: otps/{uid} (code, expiry)
+  alt Email delivery enabled
+    App->>Email: send(otp_code, to_email)
+    Email-->>U: OTP email
+  else Dev mode
+    App-->>U: Show OTP in console
+  end
+  U->>App: Submit OTP
+  App->>FS: validate OTP
+  App->>FS: mark users/{uid}.otpVerified = true
+  U->>App: Face verify or Skip (testing)
+  App->>FS: users/{uid}.verified = true
+  App->>App: Navigate Home

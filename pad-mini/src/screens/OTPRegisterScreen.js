@@ -45,49 +45,8 @@ export function OTPRegisterScreen({ navigation }) {
     return collegeEmailPattern.test(email);
   };
 
-  // Testing bypass function - sign in with existing test accounts only
-  const handleTestingBypass = async () => {
-    setLoading(true);
-    try {
-      const testAccounts = [
-        { email: 'test@bit-bangalore.edu.in', password: 'test123' },
-        { email: 'test2@bit-bangalore.edu.in', password: 'test123' },
-        { email: 'test3@bit-bangalore.edu.in', password: 'test123' }
-      ];
-      
-      let success = false;
-      
-      for (const account of testAccounts) {
-        try {
-          console.log(`Trying to sign in with ${account.email}...`);
-          await AuthService.signIn(account.email, account.password);
-          Alert.alert(
-            'Test User Signed In!', 
-            `Successfully logged in as ${account.email}`,
-            [{ text: 'OK' }]
-          );
-          success = true;
-          break;
-        } catch (signInError) {
-          console.log(`Sign in failed for ${account.email}:`, signInError.message);
-          // Continue to next account - don't try to create new ones
-        }
-      }
-      
-      if (!success) {
-        Alert.alert(
-          'Testing Login Failed', 
-          'All test accounts failed to sign in. Try using the normal registration flow or check console for errors.',
-          [{ text: 'OK' }]
-        );
-      }
-      
-    } catch (error) {
-      Alert.alert('Testing Error', 'Testing bypass failed: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // REMOVED: Auto-login was causing "Too many failed attempts" error
+  // Use the verification screen's bypass button instead
 
   const validateStep1 = () => {
     const newErrors = {};
@@ -285,18 +244,6 @@ export function OTPRegisterScreen({ navigation }) {
         >
           Skip to Step 2 (for testing)
         </Button>
-
-        {/* Testing bypass - Go directly to Home */}
-        <Button
-          mode="outlined"
-          onPress={handleTestingBypass}
-          loading={loading}
-          disabled={loading}
-          style={[styles.backButton, { marginTop: 8, borderColor: theme.colors.primary }]}
-          icon="home"
-        >
-          🏠 Go to Home (Testing Bypass)
-        </Button>
       </Card.Content>
     </Card>
   );
@@ -359,18 +306,6 @@ export function OTPRegisterScreen({ navigation }) {
           style={styles.button}
         >
           Verify & Complete Registration
-        </Button>
-
-        {/* Direct navigation button for testing */}
-        <Button
-          mode="outlined"
-          onPress={handleTestingBypass}
-          loading={loading}
-          disabled={loading}
-          style={[styles.backButton, { borderColor: theme.colors.primary }]}
-          icon="home"
-        >
-          🏠 Go to Home (Testing Bypass)
         </Button>
 
         <Button

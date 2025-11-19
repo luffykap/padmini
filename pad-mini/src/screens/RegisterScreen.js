@@ -11,7 +11,10 @@ import {
 } from 'react-native-paper';
 import { theme } from '../theme/theme';
 
-export default function RegisterScreen({ navigation }) {
+export default function RegisterScreen({ navigation, route }) {
+  // Get gender verification data from previous screen
+  const { genderVerified, verificationData, pendingReview } = route.params || {};
+  
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -76,7 +79,10 @@ export default function RegisterScreen({ navigation }) {
       setTimeout(() => {
         setLoading(false);
         navigation.navigate('Verification', { 
-          userData: formData 
+          userData: formData,
+          genderVerified: genderVerified,
+          verificationData: verificationData,
+          pendingReview: pendingReview
         });
       }, 2000);
     } catch (error) {
@@ -95,6 +101,19 @@ export default function RegisterScreen({ navigation }) {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
+        {genderVerified && (
+          <Card style={[styles.card, styles.verificationCard]}>
+            <Card.Content>
+              <Title style={styles.verificationTitle}>✅ Gender Verified</Title>
+              <Paragraph style={styles.verificationText}>
+                {pendingReview 
+                  ? 'Pending manual review - You can continue registration'
+                  : `Verified as ${verificationData?.gender} (${verificationData?.confidence?.toFixed(1)}% confidence)`}
+              </Paragraph>
+            </Card.Content>
+          </Card>
+        )}
+        
         <Card style={styles.card}>
           <Card.Content>
             <Title style={styles.title}>Create Your Account</Title>
@@ -241,5 +260,20 @@ const styles = StyleSheet.create({
   },
   buttonContent: {
     paddingVertical: 8,
+  },
+  verificationCard: {
+    backgroundColor: '#E8F5E9',
+    marginBottom: 16,
+  },
+  verificationTitle: {
+    color: '#2E7D32',
+    fontSize: 18,
+    textAlign: 'center',
+  },
+  verificationText: {
+    color: '#1B5E20',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 8,
   },
 });

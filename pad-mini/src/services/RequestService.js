@@ -119,65 +119,71 @@ export class RequestService {
 
   static async acceptRequest(requestId, helperId, message) {
     try {
+      console.log('🔄 Accepting request:', { requestId, helperId, message });
       const requestRef = doc(db, 'requests', requestId);
       
+      // First, get the request to find the requester ID
+      const requestSnap = await getDoc(requestRef);
+      if (!requestSnap.exists()) {
+        throw new Error('Request not found');
+      }
+      
+      const requestData = requestSnap.data();
+      const requesterId = requestData.requesterId; // Field is 'requesterId', not 'userId'
+      
+      console.log('📋 Request data:', { requesterId, requestId, helperId, requestData });
+      
+      // Create chat room with correct parameters FIRST
+      console.log('✅ Request accepted, creating chat room...');
+      const chatRoom = await this.createChatRoom(requestId, requesterId, helperId);
+      console.log('✅ Chat room created:', chatRoom.id);
+      
+      // Update request with chat room ID
       await updateDoc(requestRef, {
         status: 'accepted',
         acceptedBy: helperId,
         acceptedAt: serverTimestamp(),
-        helperMessage: message
+        helperMessage: message || '',
+        chatRoomId: chatRoom.id // Store the actual chat room ID
       });
 
-      // Create chat room
-      const chatRoom = await this.createChatRoom(requestId, helperId);
-      
+      console.log('✅ Request updated with chatRoomId');
       return chatRoom;
     } catch (error) {
-      throw new Error('Failed to accept request');
+      console.error('❌ Error in acceptRequest:', error);
+      throw new Error(`Failed to accept request: ${error.message}`);
     }
   }
 
-  static async cancelRequest(requestId, userId) {
+  static async createChatRoom(requestId, requesterId, helperId) {
     try {
-      const requestRef = doc(db, 'requests', requestId);
+      console.log('📝 Creating chat room:', { requestId, requesterId, helperId });
       
-      await updateDoc(requestRef, {
-        status: 'cancelled',
-        cancelledAt: serverTimestamp(),
-        cancelledBy: userId
-      });
-    } catch (error) {
-      throw new Error('Failed to cancel request');
-    }
-  }
-
-  static async completeRequest(requestId) {
-    try {
-      const requestRef = doc(db, 'requests', requestId);
-      
-      await updateDoc(requestRef, {
-        status: 'completed',
-        completedAt: serverTimestamp()
-      });
-    } catch (error) {
-      throw new Error('Failed to complete request');
-    }
-  }
-
-  static async createChatRoom(requestId, helperId) {
-    try {
       const chatRoom = {
         requestId,
-        participants: [requestId, helperId], // requester and helper IDs
+        requesterId,
+        helperId,
+        participants: [requesterId, helperId], // requester and helper IDs
         createdAt: serverTimestamp(),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
-        isActive: true
+        isActive: true,
+        lastMessageAt: serverTimestamp()
       };
 
       const docRef = await addDoc(collection(db, 'chats'), chatRoom);
+      console.log('✅ Chat room created with ID:', docRef.id);
+      
+      // Send welcome message using ChatService
+      const ChatService = require('./ChatService').ChatService;
+      await ChatService.sendMessage(docRef.id, 'system', 
+        '💬 Private chat created! Please coordinate a safe meeting spot. This chat will auto-delete after 24 hours for privacy.',
+        'system'
+      );
+      
       return { id: docRef.id, ...chatRoom };
     } catch (error) {
-      throw new Error('Failed to create chat room');
+      console.error('❌ Error creating chat room:', error);
+      throw new Error(`Failed to create chat room: ${error.message}`);
     }
   }
 
@@ -342,13 +348,91 @@ export class RequestService {
     }
   }
 
-  // Mark a user's request as completed
+  // Mark a user's request as completed - updates status and deactivates chat
   static async completeRequest(requestId) {
     try {
-      await updateDoc(doc(db, 'requests', requestId), {
+      console.log('✅ Marking request as completed:', requestId);
+      
+      // Get the request to find associated chat
+      const requestRef = doc(db, 'requests', requestId);
+      const requestSnap = await getDoc(requestRef);
+      
+      if (!requestSnap.exists()) {
+        throw new Error('Request not found');
+      }
+      
+      const requestData = requestSnap.data();
+      
+      // Update request status to completed
+      await updateDoc(requestRef, {
         status: 'completed',
         completedAt: serverTimestamp()
       });
+      
+      console.log('✅ Request marked as completed');
+      
+      // Deactivate associated chat if it exists
+      if (requestData.chatRoomId) {
+        console.log('🔒 Deactivating chat room:', requestData.chatRoomId);
+        try {
+          const chatRef = doc(db, 'chats', requestData.chatRoomId);
+          await updateDoc(chatRef, {
+            isActive: false,
+            completedAt: serverTimestamp()
+          });
+          console.log('✅ Chat room deactivated');
+        } catch (chatError) {
+          console.error('Error deactivating chat:', chatError);
+          // Don't throw - request is still completed even if chat update fails
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error completing request:', error);
+      throw error;
+    }
+  }
+
+  // Delete a completed request and its chat (optional cleanup - not used by default)
+  static async deleteCompletedRequest(requestId) {
+    try {
+      console.log('🗑️ Deleting completed request:', requestId);
+      
+      // Get the request to find associated chat
+      const requestRef = doc(db, 'requests', requestId);
+      const requestSnap = await getDoc(requestRef);
+      
+      if (!requestSnap.exists()) {
+        throw new Error('Request not found');
+      }
+      
+      const requestData = requestSnap.data();
+      
+      // Delete associated chat room if it exists
+      if (requestData.chatRoomId) {
+        console.log('🗑️ Deleting chat room:', requestData.chatRoomId);
+        
+        // Delete all messages in the chat
+        const messagesQuery = query(
+          collection(db, 'chats', requestData.chatRoomId, 'messages')
+        );
+        const messagesSnap = await getDocs(messagesQuery);
+        
+        const deletePromises = messagesSnap.docs.map(msgDoc => 
+          deleteDoc(doc(db, 'chats', requestData.chatRoomId, 'messages', msgDoc.id))
+        );
+        await Promise.all(deletePromises);
+        
+        // Delete the chat room itself
+        await deleteDoc(doc(db, 'chats', requestData.chatRoomId));
+        console.log('✅ Chat room deleted');
+      }
+      
+      // Delete the request
+      await deleteDoc(requestRef);
+      console.log('✅ Request deleted');
+      
       return true;
     } catch (error) {
       console.error('Error completing request:', error);

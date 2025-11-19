@@ -56,8 +56,9 @@ export default function RequestHelpScreen({ navigation }) {
   ];
 
   const handleSubmitRequest = async () => {
-    if (!requestData.description.trim()) {
-      Alert.alert('Description Required', 'Please provide a brief description of what you need.');
+    // Validation: Only check required fields (helpType and urgency have defaults)
+    if (!requestData.helpType || !requestData.urgency) {
+      Alert.alert('Missing Information', 'Please select what you need and urgency level.');
       return;
     }
 
@@ -69,21 +70,27 @@ export default function RequestHelpScreen({ navigation }) {
       const newRequest = await RequestService.createHelpRequest(currentUser.uid, requestData);
       console.log('Request created in Firebase:', newRequest.id);
       
+      // Reset loading state
       setLoading(false);
+      
+      // Show success message and redirect to Home (My Requests tab)
       Alert.alert(
         'Request Sent!',
         'Your request has been posted and nearby verified students will be notified!',
         [
           {
-            text: 'View Requests',
-            onPress: () => navigation.navigate('Home')
-          },
-          {
             text: 'OK',
-            onPress: () => navigation.goBack()
+            onPress: () => navigation.navigate('Home')
           }
-        ]
+        ],
+        { cancelable: false }
       );
+      
+      // Auto-redirect after 2 seconds even if alert is dismissed
+      setTimeout(() => {
+        navigation.navigate('Home');
+      }, 2000);
+      
     } catch (error) {
       setLoading(false);
       console.error('Error submitting request:', error);
@@ -211,33 +218,48 @@ const styles = StyleSheet.create({
       height: '100vh',
       maxHeight: '100vh',
       overflowY: 'scroll',
+      overflowX: 'hidden', // Prevent horizontal scroll
       WebkitOverflowScrolling: 'touch',
     }),
   },
   content: {
+    width: '100%',
+    maxWidth: 900, // Centered container max width
+    alignSelf: 'center',
     padding: 16,
     ...(Platform.OS === 'web' && {
       minHeight: 'calc(100vh + 200px)',
       paddingBottom: 60,
       display: 'block',
+      boxSizing: 'border-box',
     }),
   },
   card: {
     elevation: 4,
     borderRadius: theme.roundness,
+    width: '100%',
+    maxWidth: '100%', // Ensure card doesn't overflow
   },
   title: {
     textAlign: 'center',
     color: theme.colors.primary,
     marginBottom: 8,
+    fontSize: 24,
+    ...(Platform.OS === 'web' && {
+      '@media (max-width: 600px)': {
+        fontSize: 20,
+      },
+    }),
   },
   subtitle: {
     textAlign: 'center',
     marginBottom: 24,
     color: theme.colors.text,
+    fontSize: 14,
   },
   section: {
     marginBottom: 24,
+    width: '100%',
   },
   sectionTitle: {
     fontSize: 16,
@@ -249,22 +271,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
+    width: '100%',
+    flexWrap: 'wrap', // Allow wrapping on small screens
   },
   radioLabel: {
     marginLeft: 8,
     flex: 1,
+    fontSize: 14,
+    minWidth: 150, // Ensure readable width
   },
   input: {
     marginBottom: 8,
+    width: '100%',
+    maxWidth: '100%', // Prevent overflow
   },
   switchContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    width: '100%',
+    flexWrap: 'wrap', // Wrap on very small screens
   },
   switchInfo: {
     flex: 1,
     marginRight: 16,
+    minWidth: 200, // Ensure readable width
   },
   switchLabel: {
     fontSize: 16,
@@ -273,14 +304,19 @@ const styles = StyleSheet.create({
   safetyCard: {
     backgroundColor: theme.colors.mintGreen,
     marginBottom: 24,
+    width: '100%',
+    maxWidth: '100%',
   },
   safetyText: {
     textAlign: 'center',
     color: theme.colors.text,
     fontSize: 14,
+    lineHeight: 20,
   },
   submitButton: {
     elevation: 4,
+    width: '100%',
+    maxWidth: '100%',
   },
   buttonContent: {
     paddingVertical: 8,

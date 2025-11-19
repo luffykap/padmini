@@ -29,46 +29,8 @@ export default function WelcomeScreen({ navigation }) {
       setLoginLoading(false);
     }
   };
-    // Testing bypass function - sign in with existing test accounts only
-  const handleTestingBypass = async () => {
-    try {
-      const testAccounts = [
-        { email: 'test@bit-bangalore.edu.in', password: 'test123' },
-        { email: 'test2@bit-bangalore.edu.in', password: 'test123' },
-        { email: 'test3@bit-bangalore.edu.in', password: 'test123' }
-      ];
-      
-      let success = false;
-      
-      for (const account of testAccounts) {
-        try {
-          console.log(`Trying to sign in with ${account.email}...`);
-          await AuthService.signIn(account.email, account.password);
-          Alert.alert(
-            'Test User Signed In!', 
-            `Successfully logged in as ${account.email}`,
-            [{ text: 'OK' }]
-          );
-          success = true;
-          break;
-        } catch (signInError) {
-          console.log(`Sign in failed for ${account.email}:`, signInError.message);
-          // Continue to next account - don't try to create new ones
-        }
-      }
-      
-      if (!success) {
-        Alert.alert(
-          'Testing Login Failed', 
-          'All test accounts failed to sign in. Try using the normal registration flow or check console for errors.',
-          [{ text: 'OK' }]
-        );
-      }
-      
-    } catch (error) {
-      Alert.alert('Error', 'Testing bypass failed: ' + error.message);
-    }
-  };
+  // REMOVED: Auto-login was causing "Too many failed attempts" error
+  // Use the normal registration flow instead, which includes a verification bypass button
 
   return (
     <LinearGradient
@@ -108,7 +70,7 @@ export default function WelcomeScreen({ navigation }) {
         <View style={styles.buttonContainer}>
           <Button
             mode="contained"
-            onPress={() => navigation.navigate('OTPRegister')}
+            onPress={() => navigation.navigate('GenderVerification')}
             style={styles.joinButton}
             contentStyle={styles.buttonContent}
             labelStyle={styles.joinButtonText}
@@ -122,21 +84,6 @@ export default function WelcomeScreen({ navigation }) {
             labelStyle={styles.loginButtonText}
           >
             Already have an account? Sign In
-          </Button>
-          
-          {/* Testing bypass button */}
-          <Button
-            mode="outlined"
-            onPress={handleTestingBypass}
-            style={[styles.loginButton, { 
-              borderColor: 'rgba(255, 255, 255, 0.5)', 
-              marginTop: 20,
-              backgroundColor: 'rgba(255, 255, 255, 0.1)'
-            }]}
-            labelStyle={styles.loginButtonText}
-            icon="home"
-          >
-            🧪 Testing: Go to Home Screen
           </Button>
         </View>
       </View>

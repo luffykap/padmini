@@ -1,9 +1,14 @@
-# URGENT: Fix Firestore Security Rules
+# 🔒 URGENT: Fix Firestore Security Rules
 
-## Problem: 
-Your OTP registration is failing with 400 errors because Firestore security rules are blocking the requests.
+## ❌ Current Errors:
 
-## Quick Fix:
+1. **"Missing or insufficient permissions"** when accepting requests
+2. **Firestore 400 errors** when creating chat rooms
+3. **OTP registration failing** (if applicable)
+
+---
+
+## ✅ Quick Fix:
 
 ### Step 1: Go to Firebase Console
 1. Open: https://console.firebase.google.com/project/pad-mini/firestore
@@ -30,40 +35,66 @@ service cloud.firestore {
 - Use ONLY for testing
 - Replace with secure rules later
 
-## After Testing, Use These Secure Rules:
+## ✅ Better Rules (Balanced Security):
 
 ```javascript
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // OTP verifications - anyone can write, owner can read
-    match /otpVerifications/{email} {
-      allow create: if true;
-      allow read, update: if true; // For OTP verification
+    
+    // Helper function
+    function isSignedIn() {
+      return request.auth != null;
     }
     
-    // Users can only access their own data
+    // OTPs - needed for registration
+    match /otps/{otpId} {
+      allow read, create: if true; // Anyone can verify OTPs
+    }
+    
+    // Users - can read others, write own
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId;
     }
     
-    // Help requests - authenticated users can read/write
+    // Requests - authenticated users can read/write
     match /requests/{requestId} {
-      allow read, write: if request.auth != null;
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      // Allow update if user is requester OR helper
+      allow update: if isSignedIn() && (
+        resource.data.requesterId == request.auth.uid ||
+        request.resource.data.acceptedBy == request.auth.uid ||
+        resource.data.acceptedBy == request.auth.uid
+      );
+      allow delete: if isSignedIn() && resource.data.requesterId == request.auth.uid;
     }
     
-    // Chat messages - authenticated users can read/write  
+    // Chats - participants only
     match /chats/{chatId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isSignedIn() && (
+        request.auth.uid in resource.data.participants ||
+        request.auth.uid in request.resource.data.participants
+      );
+      allow create: if isSignedIn(); // Anyone can create when accepting request
+      
       match /messages/{messageId} {
-        allow read, write: if request.auth != null;
+        allow read, create: if isSignedIn();
       }
+    }
+    
+    // Notifications
+    match /notifications/{notifId} {
+      allow read, write: if isSignedIn();
     }
   }
 }
 ```
 
-## After You Fix Rules:
+---
+
+## 🚀 After You Update Rules:
 1. Refresh your app: http://localhost:8082
 2. Try the OTP registration again
 3. Check console for "OTP data stored in Firestore successfully"

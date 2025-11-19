@@ -24,6 +24,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 
 // Import screens
 import WelcomeScreen from './src/screens/WelcomeScreen';
+import GenderVerificationScreen from './src/screens/GenderVerificationScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import { OTPRegisterScreen } from './src/screens/OTPRegisterScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -68,6 +69,11 @@ function AppNavigator() {
           name="Welcome" 
           component={WelcomeScreen}
           options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="GenderVerification" 
+          component={GenderVerificationScreen}
+          options={{ title: 'Gender Verification' }}
         />
         <Stack.Screen 
           name="Register" 

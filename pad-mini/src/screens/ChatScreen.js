@@ -4,40 +4,25 @@ import { GiftedChat, Bubble, Send } from 'react-native-gifted-chat';
 import { IconButton, Avatar } from 'react-native-paper';
 import { theme } from '../theme/theme';
 import { ChatService } from '../services/ChatService';
+import { useAuth } from '../context/AuthContext';
 
 export default function ChatScreen({ navigation, route }) {
+  const { user } = useAuth();
   const { requestId, chatRoomId, isHelper } = route.params;
   const [messages, setMessages] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
   const [otherUserTyping, setOtherUserTyping] = useState(false);
   const [unsubscribeMessages, setUnsubscribeMessages] = useState(null);
 
-  // Create persistent user IDs that match the ones from other screens
-  const [persistentUser] = useState(() => {
-    const existingUserId = typeof window !== 'undefined' ? 
-      window.sessionStorage?.getItem('pad-mini-user-id') : null;
-    
-    if (existingUserId) {
-      return {
-        _id: existingUserId,
-        name: `User ${existingUserId.slice(-4)}`,
-        avatar: `https://via.placeholder.com/150/${isHelper ? 'e91e63' : '9c27b0'}/FFFFFF?text=${existingUserId.slice(-1)}`
-      };
-    }
-    
-    const newUserId = `test-user-${Math.random().toString(36).substr(2, 9)}`;
-    if (typeof window !== 'undefined' && window.sessionStorage) {
-      window.sessionStorage.setItem('pad-mini-user-id', newUserId);
-    }
-    
-    return {
-      _id: newUserId,
-      name: `User ${newUserId.slice(-4)}`,
-      avatar: `https://via.placeholder.com/150/${isHelper ? 'e91e63' : '9c27b0'}/FFFFFF?text=${newUserId.slice(-1)}`
-    };
-  });
-
-  const currentUser = persistentUser;
+  // Check if user is authenticated
+  if (!user) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>Authentication Required</Text>
+        <Text style={styles.errorSubtext}>Please log in to access chat</Text>
+      </View>
+    );
+  }
 
   useEffect(() => {
     console.log('ChatScreen: Setting up Firebase real-time messaging for chatRoomId:', chatRoomId);
@@ -70,19 +55,25 @@ export default function ChatScreen({ navigation, route }) {
     try {
       // Send message to Firebase
       const message = newMessages[0];
-      await ChatService.sendMessage(chatRoomId, currentUser._id, message.text);
+      await ChatService.sendMessage(chatRoomId, user.uid, message.text);
       
-      console.log('💬 Message sent to Firebase:', message.text);
+      console.log('💬 Message sent to Firebase by user:', user.uid);
     } catch (error) {
       console.error('Error sending message to Firebase:', error);
       Alert.alert('Error', 'Failed to send message. Please try again.');
     }
-  }, [chatRoomId, currentUser._id]);
+  }, [chatRoomId, user.uid]);
+
+  const handleTyping = useCallback((text) => {
+    // User is typing - could be used to show typing indicator to other user
+    // For now, just update local state
+    setIsTyping(text.length > 0);
+  }, []);
 
   const handleRequestCompletion = useCallback(async () => {
     Alert.alert(
       'Mark Request as Completed',
-      'Are you sure you want to mark this request as completed? This will delete the chat for both users.',
+      'Are you sure you want to mark this request as completed? Chat will remain open for 5 minutes before auto-deleting.',
       [
         {
           text: 'Cancel',
@@ -90,18 +81,18 @@ export default function ChatScreen({ navigation, route }) {
         },
         {
           text: 'Complete',
-          style: 'destructive',
           onPress: async () => {
             try {
-              // Complete the chat in Firebase
-              await ChatService.completeChatRoom(chatRoomId, currentUser._id);
+              // Complete the chat in Firebase (5 min auto-delete)
+              await ChatService.completeChatRoom(chatRoomId, user.uid);
               
-              // Navigate back after a short delay
-              setTimeout(() => {
-                navigation.goBack();
-              }, 3000);
+              Alert.alert(
+                'Request Completed! ✅',
+                'This chat will remain open for 5 minutes, then auto-delete for privacy.',
+                [{ text: 'OK' }]
+              );
               
-              console.log('✅ Request completion initiated');
+              console.log('✅ Request completion initiated - chat will auto-delete in 5 minutes');
             } catch (error) {
               console.error('Error completing request:', error);
               Alert.alert('Error', 'Failed to complete request. Please try again.');
@@ -110,7 +101,7 @@ export default function ChatScreen({ navigation, route }) {
         }
       ]
     );
-  }, [chatRoomId, currentUser._id, navigation]);
+  }, [chatRoomId, user.uid]);
 
   const renderBubble = (props) => {
     return (
@@ -140,14 +131,14 @@ export default function ChatScreen({ navigation, route }) {
 
   const renderSend = (props) => {
     return (
-      <Send {...props}>
-        <View style={styles.sendContainer}>
-          <IconButton
-            icon="send"
-            size={24}
-            iconColor={theme.colors.primary}
-            style={styles.sendButton}
-          />
+      <Send 
+        {...props}
+        containerStyle={styles.sendContainer}
+      >
+        <View style={styles.sendIconWrapper}>
+          <Text style={{ color: theme.colors.primary, fontSize: 18, fontWeight: 'bold' }}>
+            Send ➤
+          </Text>
         </View>
       </Send>
     );
@@ -201,7 +192,11 @@ export default function ChatScreen({ navigation, route }) {
         messages={messages}
         onSend={messages => onSend(messages)}
         onInputTextChanged={handleTyping}
-        user={currentUser}
+        user={{
+          _id: user.uid,
+          name: user.displayName || user.email || 'User',
+          avatar: user.photoURL || undefined
+        }}
         renderBubble={renderBubble}
         renderSend={renderSend}
         renderAvatar={renderAvatar}
@@ -285,11 +280,14 @@ const styles = StyleSheet.create({
   sendContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
-    marginBottom: 8,
+    marginRight: 10,
+    marginBottom: 5,
   },
-  sendButton: {
-    margin: 0,
+  sendIconWrapper: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   avatar: {
     marginBottom: 8,

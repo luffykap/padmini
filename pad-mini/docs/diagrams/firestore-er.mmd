@@ -1,0 +1,51 @@
+erDiagram
+  USERS ||--o{ REQUESTS : creates
+  USERS ||--o{ CHATS : participates
+  CHATS ||--o{ MESSAGES : contains
+
+  USERS {
+    string uid PK
+    string fullName
+    string email
+    string college
+    bool otpVerified
+    bool verified
+    string verificationMethod
+    timestamp verificationDate
+  }
+
+  REQUESTS {
+    string id PK
+    string requesterId FK
+    string helpType
+    string description
+    number lat
+    number lng
+    string urgency
+    string status "open|accepted|completed"
+    string acceptedBy FK
+    timestamp createdAt
+    bool isAnonymous
+  }
+
+  CHATS {
+    string id PK
+    string requestId FK
+    string userAId FK
+    string userBId FK
+    timestamp createdAt
+  }
+
+  MESSAGES {
+    string id PK
+    string chatId FK
+    string senderId FK
+    string text
+    timestamp createdAt
+  }
+
+  OTPS {
+    string uid PK
+    string code
+    timestamp expiresAt
+  }

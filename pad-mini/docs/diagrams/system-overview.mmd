@@ -1,0 +1,29 @@
+flowchart LR
+  subgraph Client[React Native App (Expo)]
+    UI[React Native + React Native Paper]
+    Nav[React Navigation]
+    Ctx[Auth Context]
+    Svc[Services Layer]
+  end
+
+  subgraph Firebase[Firebase Backend]
+    Auth[Auth (Email/Password)]
+    FS[(Firestore)]
+    Storage[Storage]
+    FCM[Cloud Messaging]
+  end
+
+  subgraph Integrations[External Services]
+    EmailJS[EmailJS (OTP Email Delivery)]
+    ExpoAPIs[Expo APIs (Camera, Location)]
+  end
+
+  UI --> Nav
+  UI --> Ctx
+  Ctx --> Svc
+  Svc --> Auth
+  Svc --> FS
+  Svc --> Storage
+  Svc --> FCM
+  Svc -. optional .-> EmailJS
+  UI --> ExpoAPIs

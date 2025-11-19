@@ -7,13 +7,14 @@ import {
   Card, 
   ActivityIndicator 
 } from 'react-native-paper';
-import { Camera } from 'expo-camera';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as FaceDetector from 'expo-face-detector';
 import { theme } from '../theme/theme';
 import { useAuth } from '../context/AuthContext';
+import GenderVerificationService from '../services/GenderVerificationService';
 
 export default function VerificationScreen({ navigation, route }) {
-  const [hasPermission, setHasPermission] = useState(null);
+  const [permission, requestPermission] = useCameraPermissions();
   const [faceDetected, setFaceDetected] = useState(false);
   const [verificationStep, setVerificationStep] = useState('permission'); // permission, capture, processing, success
   const [camera, setCamera] = useState(null);
@@ -24,16 +25,38 @@ export default function VerificationScreen({ navigation, route }) {
     fullName: userProfile?.fullName || user?.displayName || 'User',
     email: user?.email || 'Unknown'
   };
+  
+  // Get gender verification data if it was already done
+  const { genderVerified, verificationData, pendingReview } = route?.params || {};
 
   useEffect(() => {
-    requestCameraPermission();
-  }, []);
-
-  const requestCameraPermission = async () => {
-    const { status } = await Camera.requestCameraPermissionsAsync();
-    setHasPermission(status === 'granted');
-    if (status === 'granted') {
+    // If gender verification was already done in GenderVerificationScreen, skip face verification
+    if (genderVerified && verificationData) {
+      handleAlreadyVerified();
+    } else if (permission === null) {
+      requestPermission();
+    } else if (permission?.granted) {
       setVerificationStep('capture');
+    }
+  }, [permission, genderVerified]);
+
+  const handleAlreadyVerified = async () => {
+    try {
+      // Update user verification with existing gender data
+      await updateVerification({
+        verified: true,
+        verificationDate: new Date().toISOString(),
+        verificationMethod: 'gender_verification_at_registration',
+        gender: verificationData.gender,
+        genderConfidence: verificationData.confidence,
+        pendingReview: pendingReview || false
+      });
+
+      // Navigate to home
+      navigation.replace('Home');
+    } catch (error) {
+      console.error('Error updating verification:', error);
+      Alert.alert('Error', 'Failed to update verification. Please try again.');
     }
   };
 
@@ -63,31 +86,82 @@ export default function VerificationScreen({ navigation, route }) {
         base64: true,
       });
 
-      // TODO: Implement actual face verification with college ID
-      // For MVP: Skip photo storage to avoid Firebase Storage costs
-      // Alternative: Use Cloudinary free tier or text-based verification
-      setTimeout(async () => {
-        try {
-          // Mark user as verified in Firestore
-          await updateVerification({
-            verified: true,
-            verificationDate: new Date().toISOString(),
-            verificationMethod: 'face_capture',
-            verificationPhoto: 'simulated' // In production, store actual photo
-          });
-          
-          setVerificationStep('success');
-          // AuthContext will automatically detect verification change and navigate to home
-        } catch (verificationError) {
-          console.error('Failed to update verification:', verificationError);
-          Alert.alert('Verification Error', 'Failed to save verification. Please try again.');
-          setVerificationStep('capture');
-        }
-      }, 3000);
+      // Validate captured image
+      const validation = GenderVerificationService.validateCapturedImage(photo);
+      if (!validation.valid) {
+        Alert.alert('Image Quality Issue', validation.error);
+        setVerificationStep('capture');
+        return;
+      }
+
+      console.log('📸 Photo captured, analyzing gender...');
+
+      // Analyze face for gender detection
+      const analysisResult = await GenderVerificationService.analyzeFaceGender(
+        photo.uri,
+        photo.base64
+      );
+
+      console.log('📊 Analysis result:', analysisResult);
+
+      // Process verification result
+      const verificationResult = await GenderVerificationService.processVerificationResult(
+        analysisResult,
+        updateVerification
+      );
+
+      if (verificationResult.success) {
+        // Female verified - proceed to home
+        Alert.alert(
+          '✓ Verification Successful!',
+          verificationResult.message,
+          [{ 
+            text: 'Continue',
+            onPress: () => setVerificationStep('success')
+          }]
+        );
+      } else if (verificationResult.requiresManualReview) {
+        // Pending admin review
+        Alert.alert(
+          '⏳ Manual Review Required',
+          verificationResult.message + '\n\nYou will receive an email once your verification is approved (usually within 24 hours).',
+          [{ 
+            text: 'OK',
+            onPress: () => navigation.replace('Welcome')
+          }]
+        );
+      } else if (verificationResult.error === 'gender_mismatch') {
+        // Not female - access denied
+        Alert.alert(
+          '🚫 Access Denied',
+          verificationResult.message,
+          [{ 
+            text: 'OK',
+            onPress: () => navigation.replace('Welcome')
+          }]
+        );
+      } else {
+        // Other errors - allow retry
+        Alert.alert(
+          'Verification Failed',
+          verificationResult.message + (verificationResult.canRetry ? '\n\nPlease try again.' : ''),
+          [{ 
+            text: 'OK',
+            onPress: () => setVerificationStep('capture')
+          }]
+        );
+      }
 
     } catch (error) {
-      Alert.alert('Verification Error', 'Failed to capture image. Please try again.');
-      setVerificationStep('capture');
+      console.error('Verification error:', error);
+      Alert.alert(
+        'Verification Error', 
+        'Failed to verify face. Please check your internet connection and try again.',
+        [{ 
+          text: 'Retry',
+          onPress: () => setVerificationStep('capture')
+        }]
+      );
     }
   };
 
@@ -101,7 +175,7 @@ export default function VerificationScreen({ navigation, route }) {
         </Paragraph>
         <Button 
           mode="contained" 
-          onPress={requestCameraPermission}
+          onPress={requestPermission}
           style={styles.button}
         >
           Grant Camera Permission
@@ -110,12 +184,40 @@ export default function VerificationScreen({ navigation, route }) {
     </Card>
   );
 
+  const handleBypassVerification = async () => {
+    Alert.alert(
+      'Skip Verification',
+      'Are you sure you want to skip face verification? This is for testing only.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Skip & Go Home',
+          onPress: async () => {
+            try {
+              await updateVerification({
+                verified: true,
+                verificationDate: new Date().toISOString(),
+                verificationMethod: 'bypassed_for_testing',
+                verificationPhoto: 'bypassed'
+              });
+              // Navigate directly to Home
+              navigation.replace('Home');
+            } catch (error) {
+              console.error('Failed to bypass verification:', error);
+              Alert.alert('Error', 'Failed to skip verification');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const renderCameraView = () => (
     <View style={styles.cameraContainer}>
-      <Camera
+      <CameraView
         ref={setCamera}
         style={styles.camera}
-        type={Camera.Constants.Type.front}
+        facing="front"
         onFacesDetected={handleFacesDetected}
         faceDetectorSettings={{
           mode: FaceDetector.FaceDetectorMode.fast,
@@ -141,7 +243,7 @@ export default function VerificationScreen({ navigation, route }) {
             </View>
           </View>
         </View>
-      </Camera>
+      </CameraView>
       
       <View style={styles.captureContainer}>
         <Button
@@ -155,6 +257,15 @@ export default function VerificationScreen({ navigation, route }) {
         >
           Verify Identity
         </Button>
+        
+        <Button
+          mode="outlined"
+          onPress={handleBypassVerification}
+          style={[styles.captureButton, styles.bypassButton]}
+          labelStyle={{ color: theme.colors.warningOrange }}
+        >
+          Skip Verification (Testing)
+        </Button>
       </View>
     </View>
   );
@@ -163,9 +274,12 @@ export default function VerificationScreen({ navigation, route }) {
     <Card style={styles.card}>
       <Card.Content style={styles.centerContent}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Title style={styles.title}>Verifying Your Identity</Title>
+        <Title style={styles.title}>Analyzing Face...</Title>
         <Paragraph style={styles.text}>
-          Please wait while we verify your identity with your college records...
+          • Detecting face{'\n'}
+          • Verifying gender{'\n'}
+          • Checking image quality{'\n\n'}
+          This ensures our platform remains a safe space for female college students only.
         </Paragraph>
       </Card.Content>
     </Card>
@@ -200,7 +314,7 @@ export default function VerificationScreen({ navigation, route }) {
     }
   };
 
-  if (hasPermission === null) {
+  if (!permission) {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -208,7 +322,7 @@ export default function VerificationScreen({ navigation, route }) {
     );
   }
 
-  if (hasPermission === false) {
+  if (!permission.granted) {
     return (
       <View style={styles.container}>
         {renderPermissionView()}
@@ -302,5 +416,9 @@ const styles = StyleSheet.create({
   captureButton: {
     paddingHorizontal: 30,
     paddingVertical: 10,
+  },
+  bypassButton: {
+    marginTop: 10,
+    borderColor: theme.colors.warningOrange,
   },
 });

@@ -10,7 +10,9 @@ import {
   Divider,
   ActivityIndicator,
   FAB,
-  IconButton
+  IconButton,
+  Dialog,
+  Portal
 } from 'react-native-paper';
 import { theme } from '../theme/theme';
 import { RequestService } from '../services/RequestService';
@@ -50,6 +52,19 @@ export default function HomeScreen({ navigation }) {
     receivedHelpCount: 2,
     communityRating: 4.8
   });
+  
+  // Confirmation Dialog State
+  const [confirmDialog, setConfirmDialog] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    onConfirm: null,
+    confirmText: 'Confirm',
+    cancelText: 'Cancel'
+  });
+  
+  // Tab State
+  const [activeTab, setActiveTab] = useState('my'); // 'my' or 'other'
 
   // Firebase unsubscribe functions
   const [unsubscribeRequests, setUnsubscribeRequests] = useState(null);
@@ -425,23 +440,43 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handleCompleteRequest = async (requestId) => {
-    try {
-      // Show confirmation alert
-      if (typeof window !== 'undefined' && window.confirm) {
-        const confirmed = window.confirm('Mark this request as completed? This will delete the chat and remove the request for both users.');
-        if (!confirmed) return;
+    setConfirmDialog({
+      visible: true,
+      title: 'Mark as Completed',
+      message: 'Mark this request as completed? This will close the chat and update the request status.',
+      confirmText: 'Yes, Complete',
+      cancelText: 'Cancel',
+      onConfirm: async () => {
+        try {
+          console.log('✅ Completing request:', requestId);
+          
+          // Call completeRequest which will:
+          // 1. Update request status to 'completed'
+          // 2. Deactivate the associated chat (isActive = false)
+          await RequestService.completeRequest(requestId);
+          
+          console.log('✅ Request completed in Firebase');
+          
+          // The Firebase real-time listeners will automatically:
+          // - Remove the chat from activeChats (filtered by isActive: true)
+          // - Update the request in myRequests/nearbyRequests
+          
+          setConfirmDialog({ ...confirmDialog, visible: false });
+          
+          // Show success message
+          Alert.alert(
+            'Request Completed',
+            'The request has been marked as completed and the chat has been closed.',
+            [{ text: 'OK' }]
+          );
+          
+        } catch (error) {
+          console.error('❌ Error completing request:', error);
+          Alert.alert('Error', 'Failed to complete request. Please try again.');
+          setConfirmDialog({ ...confirmDialog, visible: false });
+        }
       }
-
-      console.log('Completing request:', requestId);
-
-      // Complete the request in Firebase
-      await RequestService.completeRequest(requestId);
-      
-      console.log('Request completed in Firebase');
-    } catch (error) {
-      console.error('Error completing request:', error);
-      Alert.alert('Error', 'Failed to complete request. Please try again.');
-    }
+    });
   };
 
   const renderMyRequest = (request) => (
@@ -502,190 +537,123 @@ export default function HomeScreen({ navigation }) {
             </Paragraph>
           )}
           
-          <View style={styles.requestActions}>
-          <View style={styles.requestActions}>
-            {/* TEST BUTTON - Simple alert */}
-            <Button
-              mode="contained"
-              onPress={() => alert('TEST BUTTON WORKS!')}
-              style={{ backgroundColor: 'purple', marginBottom: 8 }}
-            >
-              🧪 TEST
-            </Button>
-
-            {/* Action buttons for active requests */}
-            {request.status === 'active' && (
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                <Button
-                  mode="outlined"
-                  onPress={() => {
-                    if (confirm('Cancel this help request?')) {
-                      console.log('🔴 Cancelling request:', request.id);
-                      RequestService.cancelRequest(request.id)
-                        .then(() => {
-                          alert('Request cancelled successfully!');
-                          // Manual refresh after action
-                          window.location.reload();
-                        })
-                        .catch(error => {
-                          console.error('Cancel error:', error);
-                          alert('Failed to cancel request');
-                        });
+          {/* Conditional rendering based on request status */}
+          
+          {/* ACTIVE REQUESTS: Show Complete + Cancel buttons */}
+          {request.status === 'active' && (
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+              <Button
+                mode="outlined"
+                onPress={() => {
+                  setConfirmDialog({
+                    visible: true,
+                    title: 'Cancel Request',
+                    message: 'Are you sure you want to cancel this help request?',
+                    confirmText: 'Yes, Cancel',
+                    cancelText: 'No',
+                    onConfirm: async () => {
+                      try {
+                        await RequestService.cancelRequest(request.id);
+                        setConfirmDialog({ ...confirmDialog, visible: false });
+                      } catch (error) {
+                        console.error('Cancel error:', error);
+                        Alert.alert('Error', 'Failed to cancel request');
+                        setConfirmDialog({ ...confirmDialog, visible: false });
+                      }
                     }
-                  }}
-                  style={{ borderColor: '#ff4444', flex: 1 }}
-                  textColor="#ff4444"
-                >
-                  ❌ Cancel
-                </Button>
-                <Button
-                  mode="contained"
-                  onPress={() => {
-                    if (confirm('Mark this request as completed?')) {
-                      console.log('🟢 Completing request:', request.id);
-                      RequestService.completeRequest(request.id)
-                        .then(() => {
-                          alert('Request completed successfully!');
-                          // Manual refresh after action
-                          window.location.reload();
-                        })
-                        .catch(error => {
-                          console.error('Complete error:', error);
-                          alert('Failed to complete request');
-                        });
+                  });
+                }}
+                style={{ borderColor: theme.colors.error, flex: 1 }}
+                textColor={theme.colors.error}
+              >
+                ❌ Cancel
+              </Button>
+              <Button
+                mode="contained"
+                onPress={() => {
+                  setConfirmDialog({
+                    visible: true,
+                    title: 'Mark as Completed',
+                    message: 'Mark this request as completed?',
+                    confirmText: 'Yes, Complete',
+                    cancelText: 'Cancel',
+                    onConfirm: async () => {
+                      try {
+                        await RequestService.completeRequest(request.id);
+                        setConfirmDialog({ ...confirmDialog, visible: false });
+                      } catch (error) {
+                        console.error('Complete error:', error);
+                        Alert.alert('Error', 'Failed to complete request');
+                        setConfirmDialog({ ...confirmDialog, visible: false });
+                      }
                     }
-                  }}
-                  style={{ backgroundColor: '#4CAF50', flex: 1 }}
-                >
-                  ✅ Complete
-                </Button>
-              </View>
-            )}
+                  });
+                }}
+                style={{ backgroundColor: theme.colors.safeGreen, flex: 1 }}
+              >
+                ✅ Complete
+              </Button>
+            </View>
+          )}
 
-            {/* Chat button for accepted requests */}
-            {request.status === 'accepted' && (
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                <Button
-                  mode="contained"
-                  onPress={() => navigation.navigate('Chat', { 
-                    requestId: request.id,
-                    chatRoomId: `${request.id}_${request.acceptedBy}`,
-                    isHelper: false 
-                  })}
-                  style={{ backgroundColor: theme.colors.primary, flex: 1 }}
-                >
-                  💬 Chat
-                </Button>
-                <Button
-                  mode="contained"
-                  onPress={() => {
-                    console.log('🟢 COMPLETE CLICKED (accepted):', request.id);
-                    Alert.alert(
-                      'Mark Complete',
-                      'Mark this request as completed?',
-                      [
-                        { text: 'No' },
-                        { 
-                          text: 'Yes, Complete', 
-                          onPress: async () => {
-                            try {
-                              await RequestService.completeRequest(request.id);
-                              Alert.alert('Completed', 'Request completed!');
-                            } catch (error) {
-                              Alert.alert('Error', 'Failed to complete');
-                            }
-                          }
-                        }
-                      ]
-                    );
-                  }}
-                  style={{ backgroundColor: '#4CAF50', flex: 1 }}
-                >
-                  ✅ Complete
-                </Button>
-              </View>
-            )}            {request.status === 'active' && (
-              <View style={styles.acceptedRequestActions}>
-                <Button
-                  mode="outlined"
-                  onPress={async () => {
-                    console.log('🔍 Cancel button pressed for request:', request.id);
-                    Alert.alert(
-                      'Cancel Request',
-                      'Are you sure you want to cancel this help request?',
-                      [
-                        { text: 'No', style: 'cancel' },
-                        { 
-                          text: 'Yes, Cancel', 
-                          onPress: async () => {
-                            try {
-                              await RequestService.cancelRequest(request.id);
-                              Alert.alert('Request Cancelled', 'Your help request has been cancelled.');
-                            } catch (error) {
-                              Alert.alert('Error', 'Failed to cancel request.');
-                            }
-                          }
-                        }
-                      ]
-                    );
-                  }}
-                  style={[styles.acceptButton, { borderColor: theme.colors.error, flex: 1, marginRight: 8 }]}
-                  contentStyle={styles.buttonContent}
-                  textColor={theme.colors.error}
-                >
-                  ❌ Cancel Request
-                </Button>
-                <Button
-                  mode="contained"
-                  onPress={() => {
-                    console.log('🔍 Complete button clicked for request:', request.id);
-                    Alert.alert(
-                      'Mark as Completed',
-                      'Are you sure you want to mark this request as completed?',
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        { 
-                          text: 'Yes, Complete', 
-                          onPress: async () => {
-                            console.log('🔍 Completing request:', request.id);
-                            try {
-                              await RequestService.completeRequest(request.id);
-                              Alert.alert('Request Completed', 'Thank you for using our service!');
-                            } catch (error) {
-                              console.error('Error completing request:', error);
-                              Alert.alert('Error', 'Failed to complete request: ' + error.message);
-                            }
-                          }
-                        }
-                      ]
-                    );
-                  }}
-                  style={[styles.acceptButton, { backgroundColor: theme.colors.safeGreen, flex: 1 }]}
-                  contentStyle={styles.buttonContent}
-                >
-                  ✅ Complete
-                </Button>
-              </View>
-            )}
-          </View>
+          {/* ACCEPTED REQUESTS: Show Chat + Complete buttons */}
+          {request.status === 'accepted' && request.chatRoomId && (
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+              <Button
+                mode="contained"
+                onPress={() => navigation.navigate('Chat', { 
+                  requestId: request.id,
+                  chatRoomId: request.chatRoomId,
+                  isHelper: false 
+                })}
+                style={{ backgroundColor: theme.colors.primary, flex: 1 }}
+              >
+                💬 Chat
+              </Button>
+              <Button
+                mode="contained"
+                onPress={() => {
+                  setConfirmDialog({
+                    visible: true,
+                    title: 'Mark Complete',
+                    message: 'Mark this request as completed?',
+                    confirmText: 'Yes, Complete',
+                    cancelText: 'No',
+                    onConfirm: async () => {
+                      try {
+                        await RequestService.completeRequest(request.id);
+                        setConfirmDialog({ ...confirmDialog, visible: false });
+                      } catch (error) {
+                        Alert.alert('Error', 'Failed to complete');
+                        setConfirmDialog({ ...confirmDialog, visible: false });
+                      }
+                    }
+                  });
+                }}
+                style={{ backgroundColor: theme.colors.safeGreen, flex: 1 }}
+              >
+                ✅ Complete
+              </Button>
+            </View>
+          )}
 
-            {/* Status messages for completed/cancelled requests */}
-            {request.status === 'completed' && (
-              <View style={[styles.statusMessageContainer, { backgroundColor: '#d4edda', borderColor: theme.colors.safeGreen }]}>
-                <Paragraph style={[styles.statusMessage, { color: theme.colors.safeGreen }]}>
-                  ✅ Request Completed - Thank you for using our service!
-                </Paragraph>
-              </View>
-            )}
+          {/* COMPLETED REQUESTS: Show completion banner only */}
+          {request.status === 'completed' && (
+            <View style={[styles.statusMessageContainer, { backgroundColor: '#d4edda', borderColor: theme.colors.safeGreen, marginTop: 12 }]}>
+              <Paragraph style={[styles.statusMessage, { color: theme.colors.safeGreen }]}>
+                ✅ Request Completed - Thank you for using our service!
+              </Paragraph>
+            </View>
+          )}
 
-            {request.status === 'cancelled' && (
-              <View style={[styles.statusMessageContainer, { backgroundColor: '#f8d7da', borderColor: theme.colors.error }]}>
-                <Paragraph style={[styles.statusMessage, { color: theme.colors.error }]}>
-                  ❌ Request Cancelled
-                </Paragraph>
-              </View>
-            )}
-          </View>
+          {/* CANCELLED REQUESTS: Show cancellation banner only */}
+          {request.status === 'cancelled' && (
+            <View style={[styles.statusMessageContainer, { backgroundColor: '#f8d7da', borderColor: theme.colors.error, marginTop: 12 }]}>
+              <Paragraph style={[styles.statusMessage, { color: theme.colors.error }]}>
+                ❌ Request Cancelled
+              </Paragraph>
+            </View>
+          )}
         </View>
       </Card.Content>
     </Card>
@@ -750,12 +718,12 @@ export default function HomeScreen({ navigation }) {
             {request.isAccepted ? (
               // Show different options based on user relationship to the request
               <View style={{ flexDirection: 'row', gap: 8 }}>
-                {request.helperId === user.uid && (
+                {request.helperId === user.uid && request.chatRoomId && (
                   <Button
                     mode="contained"
                     onPress={() => navigation.navigate('Chat', { 
                       requestId: request.id,
-                      chatRoomId: `chat-${request.id}-${user.uid}`,
+                      chatRoomId: request.chatRoomId,
                       isHelper: true 
                     })}
                     style={[styles.acceptButton, { backgroundColor: theme.colors.primary, flex: 1 }]}
@@ -806,13 +774,19 @@ export default function HomeScreen({ navigation }) {
             : `You're helping with ${request.helpType}`
           }
         </Paragraph>
-        <Button
-          mode="outlined"
-          onPress={() => navigation.navigate('Chat', { requestId: request.id })}
-          style={styles.chatButton}
-        >
-          Open Chat
-        </Button>
+        {request.chatRoomId && (
+          <Button
+            mode="outlined"
+            onPress={() => navigation.navigate('Chat', { 
+              requestId: request.id,
+              chatRoomId: request.chatRoomId,
+              isHelper: request.type !== 'sent'
+            })}
+            style={styles.chatButton}
+          >
+            Open Chat
+          </Button>
+        )}
       </Card.Content>
     </Card>
   );
@@ -866,38 +840,6 @@ export default function HomeScreen({ navigation }) {
             </View>
           </Card.Content>
         </Card>
-
-        {/* Chat Notifications */}
-        {chatNotifications.length > 0 && (
-          <View style={styles.section}>
-            <Title style={styles.sectionTitle}>💬 New Chat Messages</Title>
-            {chatNotifications.map(notification => (
-              <Card key={notification.id} style={[styles.requestCard, { backgroundColor: theme.colors.primaryContainer }]}>
-                <Card.Content>
-                  <View style={styles.requestHeader}>
-                    <Paragraph style={styles.helpType}>
-                      🎉 {notification.message}
-                    </Paragraph>
-                    <View style={styles.requestActions}>
-                      <Button
-                        mode="contained"
-                        onPress={() => navigation.navigate('Chat', { 
-                          requestId: notification.requestId,
-                          chatRoomId: notification.chatRoomId,
-                          isHelper: false 
-                        })}
-                        style={[styles.acceptButton, { backgroundColor: theme.colors.primary }]}
-                        contentStyle={styles.buttonContent}
-                      >
-                        Open Chat
-                      </Button>
-                    </View>
-                  </View>
-                </Card.Content>
-              </Card>
-            ))}
-          </View>
-        )}
 
         {/* Quick Chat Access - Show ongoing chats */}
         {activeChats.length > 0 && (
@@ -962,105 +904,124 @@ export default function HomeScreen({ navigation }) {
           </Card.Content>
         </Card>
 
-        {/* Active Requests */}
-        {activeRequests.length > 0 && (
+        {/* Tab Buttons */}
+        <View style={styles.tabContainer}>
+          <Button
+            mode={activeTab === 'mine' ? 'contained' : 'outlined'}
+            onPress={() => setActiveTab('mine')}
+            style={styles.tabButton}
+          >
+            📋 My Requests ({myRequests.length})
+          </Button>
+          <Button
+            mode={activeTab === 'other' ? 'contained' : 'outlined'}
+            onPress={() => setActiveTab('other')}
+            style={styles.tabButton}
+          >
+            🆘 Other Requests ({nearbyRequests.length})
+          </Button>
+        </View>
+
+        {/* My Requests Tab Content */}
+        {activeTab === 'mine' && (
           <View style={styles.section}>
-            <Title style={styles.sectionTitle}>Active Requests</Title>
-            {activeRequests.map(renderActiveRequest)}
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              marginBottom: 12,
+            }}>
+              <IconButton
+                icon="refresh"
+                size={20}
+                onPress={async () => {
+                  console.log('🔄 Manual refresh of user requests...');
+                  try {
+                    // Force reload user requests
+                    const userRequests = await RequestService.getUserRequestsOnce(user.uid);
+                    console.log('🔄 Manually fetched requests:', userRequests.map(r => ({ id: r.id, status: r.status })));
+                    
+                    const formattedRequests = userRequests.map(request => ({
+                      id: request.id,
+                      helpType: formatHelpType(request.helpType),
+                      description: request.description,
+                      timeAgo: formatTimeAgo(request.createdAt),
+                      urgency: request.urgency,
+                      status: request.status,
+                      isAnonymous: request.isAnonymous,
+                      acceptedBy: request.acceptedBy,
+                      helperName: request.acceptedBy ? `Helper ${request.acceptedBy.slice(-4)}` : null,
+                      expiresAt: request.expiresAt,
+                      chatRoomId: request.chatRoomId
+                    }));
+                    
+                    // Limit to last 2 requests only
+                    const recentRequests = formattedRequests.slice(0, 2);
+                    setMyRequests(recentRequests);
+                  } catch (error) {
+                    console.error('Error refreshing requests:', error);
+                  }
+                }}
+              />
+            </View>
+            {myRequests.length > 0 ? (
+              myRequests.map(renderMyRequest)
+            ) : (
+              <Card style={styles.requestCard}>
+                <Card.Content>
+                  <View style={styles.noRequestsContainer}>
+                    <Text style={styles.noRequestsText}>
+                      📝 No requests yet
+                    </Text>
+                    <Text style={styles.noRequestsSubtext}>
+                      Your help requests will appear here
+                    </Text>
+                  </View>
+                </Card.Content>
+              </Card>
+            )}
           </View>
         )}
 
-        {/* My Requests */}
-        <View style={styles.section}>
-          <View style={{
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}>
-            <Title style={styles.sectionTitle}>
-              📋 My Requests ({myRequests.length})
-            </Title>
-            <IconButton
-              icon="refresh"
-              size={20}
-              onPress={async () => {
-                console.log('🔄 Manual refresh of user requests...');
-                try {
-                  // Force reload user requests
-                  const userRequests = await RequestService.getUserRequestsOnce(user.uid);
-                  console.log('🔄 Manually fetched requests:', userRequests.map(r => ({ id: r.id, status: r.status })));
-                  
-                  const formattedRequests = userRequests.map(request => ({
-                    id: request.id,
-                    helpType: formatHelpType(request.helpType),
-                    description: request.description,
-                    timeAgo: formatTimeAgo(request.createdAt),
-                    urgency: request.urgency,
-                    status: request.status,
-                    isAnonymous: request.isAnonymous,
-                    acceptedBy: request.acceptedBy,
-                    helperName: request.acceptedBy ? `Helper ${request.acceptedBy.slice(-4)}` : null,
-                    expiresAt: request.expiresAt
-                  }));
-                  
-                  // Limit to last 2 requests only
-                  const recentRequests = formattedRequests.slice(0, 2);
-                  setMyRequests(recentRequests);
-                } catch (error) {
-                  console.error('Error refreshing requests:', error);
-                }
-              }}
-            />
+        {/* Other Requests Tab Content */}
+        {activeTab === 'other' && (
+          <View style={styles.section}>
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              marginBottom: 12,
+            }}>
+              <IconButton
+                icon="refresh"
+                size={20}
+                onPress={() => {
+                  console.log('🔄 Refreshing nearby requests...');
+                  setRefreshing(true);
+                  setTimeout(() => setRefreshing(false), 1000);
+                }}
+              />
+            </View>
+            {nearbyRequests.length > 0 ? (
+              nearbyRequests.map(renderNearbyRequest)
+            ) : (
+              <Card style={styles.requestCard}>
+                <Card.Content>
+                  <View style={styles.noRequestsContainer}>
+                    <Text style={styles.noRequestsText}>
+                      🌸 No requests in your area right now
+                    </Text>
+                    <Text style={styles.noRequestsSubtext}>
+                      Your help will be appreciated when someone needs it!
+                    </Text>
+                  </View>
+                </Card.Content>
+              </Card>
+            )}
           </View>
-          {myRequests.length > 0 ? (
-            myRequests.map(renderMyRequest)
-          ) : (
-            <Card style={styles.requestCard}>
-              <Card.Content>
-                <View style={styles.noRequestsContainer}>
-                  <Text style={styles.noRequestsText}>
-                    📝 No requests yet
-                  </Text>
-                  <Text style={styles.noRequestsSubtext}>
-                    Your help requests will appear here
-                  </Text>
-                </View>
-              </Card.Content>
-            </Card>
-          )}
-        </View>
+        )}
 
-        {/* Nearby Requests */}
-        <View style={styles.section}>
-          <View style={{
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 16
-          }}>
-            <Title style={styles.sectionTitle}>
-              Nearby Requests ({nearbyRequests.length})
-            </Title>
-            <IconButton
-              icon="refresh"
-              size={20}
-              onPress={refreshRequests}
-              style={{ margin: 0 }}
-            />
-          </View>
-          {nearbyRequests.length > 0 ? (
-            nearbyRequests.map(renderNearbyRequest)
-          ) : (
-            <Card style={styles.emptyCard}>
-              <Card.Content>
-                <Paragraph style={styles.emptyText}>
-                  No requests in your area right now. 
-                  Your help will be appreciated when someone needs it! 🌸
-                </Paragraph>
-              </Card.Content>
-            </Card>
-          )}
-        </View>
+
 
         {/* Safety Tips */}
         <View style={styles.section}>
@@ -1100,6 +1061,34 @@ export default function HomeScreen({ navigation }) {
         size="medium"
         mode="surface"
       />
+
+      {/* Confirmation Dialog */}
+      <Portal>
+        <Dialog 
+          visible={confirmDialog.visible} 
+          onDismiss={() => setConfirmDialog({ ...confirmDialog, visible: false })}
+        >
+          <Dialog.Title>{confirmDialog.title}</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph>{confirmDialog.message}</Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setConfirmDialog({ ...confirmDialog, visible: false })}>
+              {confirmDialog.cancelText}
+            </Button>
+            <Button 
+              mode="contained" 
+              onPress={() => {
+                if (confirmDialog.onConfirm) {
+                  confirmDialog.onConfirm();
+                }
+              }}
+            >
+              {confirmDialog.confirmText}
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 }
@@ -1262,6 +1251,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
   },
+  tabContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 12,
+  },
+  tabButton: {
+    flex: 1,
+  },
   loadingContainer: {
     padding: 40,
     alignItems: 'center',
@@ -1302,5 +1300,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     textAlign: 'center',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 12,
+  },
+  tabButton: {
+    flex: 1,
   },
 });

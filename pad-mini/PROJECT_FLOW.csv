@@ -1,0 +1,57 @@
+Phase,Step,Task,Description,Dependencies,Estimated Time
+1 - Setup,1.1,Project Initialization,"Initialize React Native Expo project, install core dependencies (react-navigation, react-native-paper)",,2 hours
+1 - Setup,1.2,Firebase Setup,"Create Firebase project, enable Auth/Firestore/Storage, configure firebase.js",,1 hour
+1 - Setup,1.3,Project Structure,"Create folder structure: screens, services, components, context, config, theme",,30 mins
+1 - Setup,1.4,Theme Configuration,"Setup Material Design theme with safe colors (pink, lavender, teal)",1.3,1 hour
+2 - Authentication,2.1,Welcome Screen,"Create landing page with Get Started and Sign In options",1.4,2 hours
+2 - Authentication,2.2,Basic Auth Service,"Implement Firebase Auth service (signUp, signIn, signOut)",1.2,2 hours
+2 - Authentication,2.3,Auth Context,"Create AuthContext for managing auth state across app",2.2,2 hours
+2 - Authentication,2.4,Registration Screen,"Build registration form with college email validation",2.1,3 hours
+3 - Email Verification,3.1,OTP Generation,"Implement OTP generation and Firestore storage (10-min expiry)",2.2,2 hours
+3 - Email Verification,3.2,EmailJS Integration,"Setup EmailJS for OTP email delivery (optional for dev)",3.1,1 hour
+3 - Email Verification,3.3,OTP Verification Screen,"Build OTP input screen with validation and resend",3.1,3 hours
+3 - Email Verification,3.4,Email Verification Logic,"Complete email verification flow in AuthService",3.3,2 hours
+4 - Face Verification,4.1,Camera Permissions,"Request and handle camera permissions",2.4,1 hour
+4 - Face Verification,4.2,Face Detection Setup,"Integrate expo-face-detector for basic face detection",4.1,2 hours
+4 - Face Verification,4.3,Gender Verification Service,"Setup gender detection API or ML model integration",4.2,4 hours
+4 - Face Verification,4.4,Verification Screen UI,"Build face capture screen with oval frame overlay",4.2,3 hours
+4 - Face Verification,4.5,Verification Flow,"Implement capture → gender check → Firestore update → navigate",4.3,3 hours
+4 - Face Verification,4.6,Testing Bypass,"Add development bypass button for testing",4.5,30 mins
+5 - Core Features,5.1,Home Screen Layout,"Create dashboard with tabs: Nearby Requests, My Requests, Chats",3.4,3 hours
+5 - Core Features,5.2,Request Service,"Build RequestService with CRUD operations and Firestore listeners",1.2,4 hours
+5 - Core Features,5.3,Location Integration,"Add expo-location for getting user coordinates",5.2,2 hours
+5 - Core Features,5.4,Request Help Screen,"Build help request form (type, description, urgency, location)",5.3,4 hours
+5 - Core Features,5.5,Nearby Requests Feed,"Display real-time nearby requests with distance calculation",5.2,4 hours
+5 - Core Features,5.6,Request Accept Flow,"Implement accept request logic and status updates",5.5,3 hours
+6 - Chat System,6.1,Chat Service,"Create ChatService for managing chats and messages",5.2,3 hours
+6 1 - Chat System,6.2,Gifted Chat Integration,"Integrate react-native-gifted-chat library",6.1,2 hours
+6 - Chat System,6.3,Chat Screen,"Build real-time chat interface with message sync",6.2,4 hours
+6 - Chat System,6.4,Chat Encryption,"Add basic message encryption (optional)",6.3,3 hours
+6 - Chat System,6.5,Auto-Delete Messages,"Implement 24-hour message deletion logic",6.4,2 hours
+7 - Privacy & Safety,7.1,Anonymous Requests,"Add option to post anonymous help requests",5.4,2 hours
+7 2,Block/Report System,"Implement user blocking and reporting functionality",6.3,3 hours
+7 - Privacy & Safety,7.3,Location Privacy,"Use approximate coordinates instead of exact location",5.3,2 hours
+7 - Privacy & Safety,7.4,Firestore Security Rules,"Write production-ready Firestore security rules",1.2,3 hours
+8 - UI/UX Polish,8.1,Loading States,"Add loading indicators and skeleton screens throughout",5.1,2 hours
+8 - UI/UX Polish,8.2,Error Handling,"Implement proper error messages and user feedback",2.2,3 hours
+8 - UI/UX Polish,8.3,Pull to Refresh,"Add refresh control to all list views",5.5,1 hour
+8 - UI/UX Polish,8.4,Animations,"Add smooth transitions and micro-interactions",8.3,2 hours
+8 - UI/UX Polish,8.5,Accessibility,"Add screen reader support and proper contrast",8.4,2 hours
+9 - Testing,9.1,Unit Tests,"Write tests for services (Auth, Request, Chat)",2.2,4 hours
+9 - Testing,9.2,Integration Tests,"Test complete flows (registration, request, chat)",9.1,4 hours
+9 - Testing,9.3,Manual Testing,"Test on web, Android, iOS with different scenarios",9.2,4 hours
+9 - Testing,9.4,Bug Fixes,"Fix issues found during testing",9.3,6 hours
+10 - Deployment,10.1,Environment Config,"Setup dev/staging/prod Firebase environments",1.2,2 hours
+10 - Deployment,10.2,Production Build,"Configure app.json for production (name, icon, splash)",10.1,2 hours
+10 - Deployment,10.3,Android Build,"Build APK/AAB for Google Play Store",10.2,2 hours
+10 - Deployment,10.4,iOS Build,"Build IPA for Apple App Store (requires Mac)",10.2,3 hours
+10 - Deployment,10.5,Store Submission,"Submit to app stores with descriptions and screenshots",10.3,4 hours
+11 - Documentation,11.1,README,"Write comprehensive README with setup instructions",1.1,2 hours
+11 - Documentation,11.2,Architecture Docs,"Create architecture diagrams and flow documentation",11.1,2 hours
+11 - Documentation,11.3,API Documentation,"Document all services and their methods",11.2,2 hours
+11 - Documentation,11.4,User Guide,"Create end-user guide for app features",11.3,2 hours
+12 - Optional Enhancements,12.1,Push Notifications,"Integrate Firebase Cloud Messaging for notifications",10.1,4 hours
+12 - Optional Enhancements,12.2,In-App Rating,"Add rating system for helpers",7.2,3 hours
+12 - Optional Enhancements,12.3,Analytics,"Setup Firebase Analytics for user behavior tracking",10.1,2 hours
+12 - Optional Enhancements,12.4,Offline Support,"Add offline capability with local storage sync",5.2,6 hours
+12 - Optional Enhancements,12.5,Multi-Language,"Add internationalization support (i18n)",8.5,4 hours

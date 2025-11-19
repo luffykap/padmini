@@ -1,0 +1,18 @@
+sequenceDiagram
+  participant A as Requester (A)
+  participant B as Helper (B)
+  participant App as App (on both devices)
+  participant FS as Firestore
+
+  A->>App: Create Help Request
+  App->>FS: requests/{requestId}
+  FS-->>App: onSnapshot (nearby list updates)
+  B->>App: Accept Request
+  App->>FS: update requests/{id}.status = accepted, acceptedBy = B
+  FS-->>App: onSnapshot (status updates to A)
+  A->>App: Open Chat
+  B->>App: Open Chat
+  App->>FS: chats/{chatId}/messages (add message)
+  FS-->>App: onSnapshot (real-time chat)
+  A->>App: Mark Complete
+  App->>FS: update requests/{id}.status = completed
