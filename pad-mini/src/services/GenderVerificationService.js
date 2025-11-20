@@ -1,43 +1,64 @@
 // Gender Detection Service for Face Verification
-// Uses Face++ API (free tier: 1000 calls/month) or Face-api.js (client-side)
+// Uses face-api.js (FREE, client-side, no API limits)
 
-import * as FileSystem from 'expo-file-system';
+import * as faceapi from '@vladmandic/face-api';
 
 // Configuration
 const FACE_API_CONFIG = {
-  // Option 1: Face++ API (Recommended for production)
-  facePlusPlus: {
-    apiKey: 'HsgpzpJ0mdDg9RixHSdf-h1bwu2wxvMg', // Get from https://console.faceplusplus.com
-    apiSecret: 'TO0QMLnSLC0hKE6kCQgFn1EfdyBAocuF', // Get from https://console.faceplusplus.com
-    endpoint: 'https://api-us.faceplusplus.com/facepp/v3/detect'
-  },
-  
-  // Option 2: Face-api.js (Client-side, no API key needed)
-  // Will be loaded in the component
-  useFaceApiJs: false, // Set to true to use client-side detection
-  
   // Gender detection thresholds
-  femaleConfidenceThreshold: 70, // Minimum confidence % for female detection
-  allowManualReview: true // Allow admin review if confidence is borderline
+  femaleConfidenceThreshold: 0.5, // Minimum confidence (0-1) for female detection
+  
+  // Model loading
+  modelsLoaded: false,
+  modelPath: 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/' // CDN for models
+};
+
+// Load face-api.js models (only once)
+let modelsLoadedPromise = null;
+
+const loadModels = async () => {
+  if (FACE_API_CONFIG.modelsLoaded) return;
+  
+  if (!modelsLoadedPromise) {
+    modelsLoadedPromise = (async () => {
+      try {
+        console.log('📦 Loading face-api.js models...');
+        const modelPath = FACE_API_CONFIG.modelPath;
+        
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(modelPath),
+          faceapi.nets.ageGenderNet.loadFromUri(modelPath),
+          faceapi.nets.faceLandmark68Net.loadFromUri(modelPath),
+        ]);
+        
+        FACE_API_CONFIG.modelsLoaded = true;
+        console.log('✅ Face-api.js models loaded successfully');
+      } catch (error) {
+        console.error('❌ Failed to load models:', error);
+        modelsLoadedPromise = null;
+        throw error;
+      }
+    })();
+  }
+  
+  return modelsLoadedPromise;
 };
 
 /**
- * Analyze face image for gender detection
+ * Analyze face image for gender detection using face-api.js
  * @param {string} imageUri - Local URI of the captured image
  * @param {string} base64Image - Base64 encoded image data
  * @returns {Promise<Object>} - Analysis result with gender, confidence, and verification status
  */
 export const analyzeFaceGender = async (imageUri, base64Image) => {
   try {
-    console.log('🔍 Starting face gender analysis...');
+    console.log('🔍 Starting face gender analysis with face-api.js (FREE)...');
     
-    if (FACE_API_CONFIG.useFaceApiJs) {
-      // Client-side detection (recommended for privacy)
-      return await analyzeFaceClientSide(imageUri);
-    } else {
-      // Server-side detection (more accurate)
-      return await analyzeFaceWithAPI(base64Image);
-    }
+    // Load models if not already loaded
+    await loadModels();
+    
+    // Client-side detection (FREE, no API limits)
+    return await analyzeFaceClientSide(base64Image);
   } catch (error) {
     console.error('Face analysis error:', error);
     throw new Error('Failed to analyze face. Please try again.');
@@ -45,207 +66,71 @@ export const analyzeFaceGender = async (imageUri, base64Image) => {
 };
 
 /**
- * Server-side analysis using Face++ API
+ * Client-side analysis using face-api.js (FREE)
  */
-const analyzeFaceWithAPI = async (base64Image) => {
+const analyzeFaceClientSide = async (base64Image) => {
   try {
-    const formData = new FormData();
-    formData.append('api_key', FACE_API_CONFIG.facePlusPlus.apiKey);
-    formData.append('api_secret', FACE_API_CONFIG.facePlusPlus.apiSecret);
-    formData.append('image_base64', base64Image);
-    formData.append('return_attributes', 'gender,age,smiling,headpose,facequality');
-
-    const response = await fetch(FACE_API_CONFIG.facePlusPlus.endpoint, {
-      method: 'POST',
-      body: formData
-    });
-
-    const data = await response.json();
+    console.log('🖼️ Analyzing face with face-api.js...');
     
-    if (!response.ok || data.error_message) {
-      throw new Error(data.error_message || 'API request failed');
+    // Create image element from base64
+    const img = await createImageFromBase64(base64Image);
+    
+    // Detect face with gender and age
+    const detection = await faceapi
+      .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
+      .withFaceLandmarks()
+      .withAgeAndGender();
+    
+    if (!detection) {
+      throw new Error('No face detected in the image. Please ensure your face is clearly visible.');
     }
-
-    // Check if face was detected
-    if (!data.faces || data.faces.length === 0) {
-      return {
-        success: false,
-        error: 'No face detected',
-        message: 'Please ensure your face is clearly visible and well-lit'
-      };
-    }
-
-    if (data.faces.length > 1) {
-      return {
-        success: false,
-        error: 'Multiple faces detected',
-        message: 'Please ensure only one person is in the frame'
-      };
-    }
-
-    const faceData = data.faces[0];
-    const attributes = faceData.attributes;
     
-    // Extract gender information
-    const gender = attributes.gender.value; // 'Male' or 'Female'
-    const confidence = parseFloat(attributes.gender.confidence);
+    const { gender, genderProbability } = detection;
+    const confidence = genderProbability * 100; // Convert to percentage
     
-    // Check face quality
-    const faceQuality = attributes.facequality?.value || 100;
+    console.log(`🎭 Detected gender: ${gender} (${confidence.toFixed(1)}% confidence)`);
     
-    console.log(`📊 Gender Detection: ${gender} (${confidence.toFixed(1)}% confidence)`);
-    console.log(`📸 Face Quality: ${faceQuality.toFixed(1)}`);
-
-    // Determine verification result
-    const isFemale = gender === 'Female';
-    const meetsConfidenceThreshold = confidence >= FACE_API_CONFIG.femaleConfidenceThreshold;
-    const goodQuality = faceQuality > 70;
-
-    if (isFemale && meetsConfidenceThreshold && goodQuality) {
-      return {
-        success: true,
-        gender: 'Female',
-        confidence: confidence,
-        faceQuality: faceQuality,
-        verified: true,
-        message: 'Gender verification successful! Welcome to Pad-Mini.'
-      };
-    } else if (isFemale && !meetsConfidenceThreshold && FACE_API_CONFIG.allowManualReview) {
-      return {
-        success: false,
-        gender: 'Female',
-        confidence: confidence,
-        requiresManualReview: true,
-        message: `Verification needs manual review. Confidence: ${confidence.toFixed(1)}%`,
-        pendingVerification: true
-      };
-    } else if (!isFemale) {
-      return {
-        success: false,
-        gender: gender,
-        confidence: confidence,
-        verified: false,
-        error: 'gender_mismatch',
-        message: 'This platform is exclusively for female college students. Access denied.'
-      };
-    } else if (!goodQuality) {
-      return {
-        success: false,
-        error: 'poor_quality',
-        message: 'Image quality is too low. Please retake in better lighting.'
-      };
-    }
-
-  } catch (error) {
-    console.error('Face++ API error:', error);
-    throw error;
-  }
-};
-
-/**
- * Client-side analysis using face-api.js (privacy-focused)
- * Requires face-api.js models to be loaded
- */
-const analyzeFaceClientSide = async (imageUri) => {
-  // Note: This requires face-api.js library
-  // Install: npm install face-api.js
-  // Load models in App.js initialization
-  
-  try {
-    // This is a placeholder - actual implementation would use face-api.js
-    console.log('⚠️ Client-side gender detection requires face-api.js setup');
-    
-    // For now, return a simulated result
-    // In production, you would:
-    // 1. Load the image
-    // 2. Detect faces
-    // 3. Run gender classification model
-    // 4. Return results
-    
-    return {
-      success: false,
-      error: 'not_implemented',
-      message: 'Client-side detection not yet configured. Please use API-based detection.',
-      requiresSetup: true
-    };
-  } catch (error) {
-    console.error('Client-side analysis error:', error);
-    throw error;
-  }
-};
-
-/**
- * Validate captured image before analysis
- */
-export const validateCapturedImage = (photo) => {
-  if (!photo || !photo.uri) {
-    return {
-      valid: false,
-      error: 'Invalid photo captured'
-    };
-  }
-
-  // Check image dimensions (optional)
-  if (photo.width < 400 || photo.height < 400) {
-    return {
-      valid: false,
-      error: 'Image resolution too low. Please retake.'
-    };
-  }
-
-  return { valid: true };
-};
-
-/**
- * Handle verification result and update user profile
- */
-export const processVerificationResult = async (result, updateVerification) => {
-  if (result.success && result.verified) {
-    // Verification successful
-    await updateVerification({
-      verified: true,
-      verificationDate: new Date().toISOString(),
-      verificationMethod: 'face_gender_detection',
-      gender: result.gender,
-      genderConfidence: result.confidence,
-      faceQuality: result.faceQuality
-    });
+    // Check if female with sufficient confidence
+    const isFemale = gender === 'female';
+    const isVerified = isFemale && genderProbability >= FACE_API_CONFIG.femaleConfidenceThreshold;
     
     return {
       success: true,
-      message: result.message,
-      canProceed: true
+      verified: isVerified,
+      gender: gender,
+      confidence: confidence,
+      genderProbability: genderProbability,
+      age: Math.round(detection.age),
+      message: isVerified 
+        ? 'Gender verification successful! You are verified as female.'
+        : isFemale
+          ? `Gender detected as female, but confidence (${confidence.toFixed(1)}%) is below threshold. Please try again with better lighting.`
+          : 'This app is exclusively for female students. Gender verification failed.',
+      details: {
+        faceDetected: true,
+        detectionBox: detection.detection.box,
+        landmarks: detection.landmarks ? 68 : 0
+      }
     };
-  } else if (result.requiresManualReview) {
-    // Needs admin review
-    await updateVerification({
-      verified: false,
-      pendingReview: true,
-      verificationDate: new Date().toISOString(),
-      verificationMethod: 'face_gender_detection_pending',
-      gender: result.gender,
-      genderConfidence: result.confidence
-    });
-    
-    return {
-      success: false,
-      message: result.message,
-      requiresManualReview: true
-    };
-  } else {
-    // Verification failed
-    return {
-      success: false,
-      message: result.message || 'Verification failed',
-      error: result.error,
-      canRetry: result.error !== 'gender_mismatch'
-    };
+  } catch (error) {
+    console.error('Client-side face analysis error:', error);
+    throw error;
   }
 };
 
-export default {
+/**
+ * Create image element from base64 data (for web/React Native)
+ */
+const createImageFromBase64 = async (base64Image) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = (err) => reject(new Error('Failed to load image'));
+    img.src = `data:image/jpeg;base64,${base64Image}`;
+  });
+};
+
+export const GenderVerificationService = {
   analyzeFaceGender,
-  validateCapturedImage,
-  processVerificationResult,
-  FACE_API_CONFIG
+  loadModels
 };

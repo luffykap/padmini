@@ -17,6 +17,7 @@ import {
 import { theme } from '../theme/theme';
 import { RequestService } from '../services/RequestService';
 import { ChatService } from '../services/ChatService';
+import { UserStatsService } from '../services/UserStatsService';
 import { AuthContext, useAuth } from '../context/AuthContext';
 
 export default function HomeScreen({ navigation }) {
@@ -48,9 +49,11 @@ export default function HomeScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userStats, setUserStats] = useState({
-    helpedCount: 5,
-    receivedHelpCount: 2,
-    communityRating: 4.8
+    peopleHelped: 0,
+    timesHelped: 0,
+    communityRating: 0,
+    requestsCreated: 0,
+    requestsCompleted: 0
   });
   
   // Confirmation Dialog State
@@ -71,6 +74,7 @@ export default function HomeScreen({ navigation }) {
   const [unsubscribeMyRequests, setUnsubscribeMyRequests] = useState(null);
   const [unsubscribeChats, setUnsubscribeChats] = useState(null);
   const [unsubscribeNotifications, setUnsubscribeNotifications] = useState(null);
+  const [unsubscribeStats, setUnsubscribeStats] = useState(null);
 
   useEffect(() => {
     console.log('HomeScreen: Setting up Firebase real-time listeners for user:', currentUser.uid);
@@ -144,6 +148,13 @@ export default function HomeScreen({ navigation }) {
         });
         setUnsubscribeNotifications(() => notificationsUnsubscribe);
 
+        // 4. Set up real-time user stats listener
+        const statsUnsubscribe = UserStatsService.getUserStats(currentUser.uid, (stats) => {
+          console.log('📊 Received real-time stats update:', stats);
+          setUserStats(stats);
+        });
+        setUnsubscribeStats(() => statsUnsubscribe);
+
       } catch (error) {
         console.error('Error setting up Firebase listeners:', error);
         setLoading(false);
@@ -160,6 +171,7 @@ export default function HomeScreen({ navigation }) {
       if (unsubscribeMyRequests) unsubscribeMyRequests();
       if (unsubscribeChats) unsubscribeChats();
       if (unsubscribeNotifications) unsubscribeNotifications();
+      if (unsubscribeStats) unsubscribeStats();
     };
   }, [currentUser.uid]);
 
@@ -809,28 +821,15 @@ export default function HomeScreen({ navigation }) {
           <Card.Content>
             <Title style={styles.statsTitle}>Your Impact</Title>
             <Paragraph style={styles.userInfo}>
-              User ID: {user.uid.slice(-8)} | {currentUser.name || 'Test User'}
+              {currentUser.name}
             </Paragraph>
-            <Button 
-              mode="outlined" 
-              onPress={async () => {
-                try {
-                  await signOut();
-                } catch (error) {
-                  Alert.alert('Error', 'Failed to sign out');
-                }
-              }}
-              style={{ marginVertical: 10 }}
-            >
-              Sign Out (Test)
-            </Button>
             <View style={styles.statsContainer}>
               <View style={styles.statItem}>
-                <Title style={styles.statNumber}>{userStats.helpedCount}</Title>
+                <Title style={styles.statNumber}>{userStats.peopleHelped}</Title>
                 <Paragraph style={styles.statLabel}>People Helped</Paragraph>
               </View>
               <View style={styles.statItem}>
-                <Title style={styles.statNumber}>{userStats.receivedHelpCount}</Title>
+                <Title style={styles.statNumber}>{userStats.timesHelped}</Title>
                 <Paragraph style={styles.statLabel}>Times Helped</Paragraph>
               </View>
               <View style={styles.statItem}>

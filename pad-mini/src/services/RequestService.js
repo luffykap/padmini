@@ -16,6 +16,8 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import * as Location from 'expo-location';
+import { NotificationService } from './NotificationService';
+import { UserStatsService } from './UserStatsService';
 
 export class RequestService {
   static async createHelpRequest(userId, requestData) {
@@ -45,6 +47,13 @@ export class RequestService {
       };
 
       const docRef = await addDoc(collection(db, 'requests'), request);
+      
+      // Update user stats - increment requests created
+      await UserStatsService.incrementRequestCreated(userId);
+      
+      // Notify nearby users (they'll receive if app is open/background)
+      await this.notifyNearbyUsers(request, location);
+      
       return { id: docRef.id, ...request };
     } catch (error) {
       console.error('Error creating request:', error);
@@ -99,8 +108,24 @@ export class RequestService {
 
         console.log(`Found ${requests.length} nearby requests`);
         
-        // If callback provided, use it; otherwise this is just setting up the listener
+        // Detect new requests and send notifications
         if (callback) {
+          // Check for new requests (created in last 10 seconds)
+          const now = new Date();
+          const newRequests = requests.filter(req => {
+            const createdAt = req.createdAt?.toDate?.() || new Date(req.createdAt);
+            const ageInSeconds = (now - createdAt) / 1000;
+            return ageInSeconds < 10; // New request in last 10 seconds
+          });
+          
+          // Send notification for each new request
+          newRequests.forEach(req => {
+            NotificationService.notifyHelpRequest(
+              req.helpType,
+              req.distance.toFixed(1)
+            );
+          });
+          
           callback(requests.slice(0, 20)); // Limit to 20 nearby requests
         }
       }, (error) => {
@@ -148,6 +173,14 @@ export class RequestService {
       });
 
       console.log('✅ Request updated with chatRoomId');
+      
+      // Update helper stats - increment times helped
+      await UserStatsService.incrementHelpAccepted(helperId, requesterId);
+      
+      // Notify requester that help is coming
+      const helperProfile = await this.getUserProfile(helperId);
+      await NotificationService.notifyRequestAccepted(helperProfile.name || 'Someone');
+      
       return chatRoom;
     } catch (error) {
       console.error('❌ Error in acceptRequest:', error);
@@ -371,6 +404,15 @@ export class RequestService {
       
       console.log('✅ Request marked as completed');
       
+      // Update stats for both helper and requester
+      if (requestData.acceptedBy && requestData.requesterId) {
+        await UserStatsService.incrementHelpCompleted(
+          requestData.acceptedBy,  // helperId
+          requestData.requesterId   // requesterId
+        );
+        console.log('✅ Updated completion stats for helper & requester');
+      }
+      
       // Deactivate associated chat if it exists
       if (requestData.chatRoomId) {
         console.log('🔒 Deactivating chat room:', requestData.chatRoomId);
@@ -437,6 +479,23 @@ export class RequestService {
     } catch (error) {
       console.error('Error completing request:', error);
       throw error;
+    }
+  }
+
+  // Helper method to notify nearby users about new help request
+  static async notifyNearbyUsers(request, requesterLocation) {
+    try {
+      // This is a simple local notification approach
+      // In a production app, you'd want to:
+      // 1. Store user push tokens in Firestore
+      // 2. Query nearby users based on their last known location
+      // 3. Send push notifications via Expo's push service
+      
+      // For now, notifications are sent when users have the real-time listener active
+      console.log('📢 Help request created - nearby users will be notified via real-time listener');
+    } catch (error) {
+      console.error('Error notifying nearby users:', error);
+      // Don't throw - notification failure shouldn't prevent request creation
     }
   }
 }

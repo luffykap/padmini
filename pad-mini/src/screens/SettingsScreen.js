@@ -78,7 +78,7 @@ export default function SettingsScreen({ navigation }) {
 
             <List.Item
               title="Verified Account"
-              description="Gender verified with Face++ API"
+              description="Gender verified with face-api.js (AI)"
               left={props => (
                 <List.Icon 
                   {...props} 

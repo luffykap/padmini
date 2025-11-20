@@ -11,7 +11,6 @@ import {
   ActivityIndicator
 } from 'react-native-paper';
 import { AuthService } from '../services/AuthService';
-import { TestAuthService } from '../services/TestAuthService';
 import { EmailService } from '../services/EmailService';
 import { theme } from '../theme/theme';
 
