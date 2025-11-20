@@ -35,7 +35,20 @@ export class AuthService {
       const otp = this.generateOTP();
       const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
 
-      console.log(`Generated OTP for ${collegeEmail}: ${otp}`);
+      // Display OTP prominently in console
+      console.log('\n' + '='.repeat(60));
+      console.log('🔐 OTP GENERATED FOR REGISTRATION');
+      console.log('='.repeat(60));
+      console.log(`📧 Email: ${collegeEmail}`);
+      console.log(`🔢 OTP CODE: ${otp}`);
+      console.log(`⏰ Valid until: ${otpExpiry.toLocaleTimeString()}`);
+      console.log('='.repeat(60) + '\n');
+      
+      // Also store in window for easy access
+      if (typeof window !== 'undefined') {
+        window.CURRENT_OTP = otp;
+        console.log('💡 TIP: Type "window.CURRENT_OTP" in console to see OTP again');
+      }
 
       try {
         // Store OTP verification data temporarily
@@ -62,11 +75,12 @@ export class AuthService {
         // Continue anyway - OTP is shown in console
       }
       
-      // Return success message
+      // Return success message with OTP
       return {
         success: true,
-        message: `OTP sent to ${collegeEmail}. Check browser console for OTP: ${otp}`,
-        email: collegeEmail
+        message: `OTP sent to ${collegeEmail}. Check browser console for OTP.`,
+        email: collegeEmail,
+        otp: otp // Include OTP in response for display
       };
     } catch (error) {
       console.error('Full error:', error);

@@ -98,25 +98,23 @@ export function OTPRegisterScreen({ navigation }) {
 
     setLoading(true);
     try {
+      console.log('🚀 Sending OTP request...');
       const result = await AuthService.sendOTPToCollegeEmail(
         formData.collegeEmail,
         formData.fullName,
         formData.studentId
       );
 
+      console.log('✅ OTP Response:', result);
+
       // Automatically move to step 2
       setStep(2);
       
-      // Show appropriate message based on email delivery method
-      const alertTitle = result.isSimulated ? 'OTP Generated!' : 'OTP Sent!';
-      const alertMessage = result.isSimulated 
-        ? result.message + '\n\n💡 For real email delivery:\n1. Check console for setup instructions\n2. See EMAILJS_SETUP.md file'
-        : result.message + '\n\n📧 Check your email inbox and spam folder';
-      
+      // Show OTP in alert popup for easy access
       Alert.alert(
-        alertTitle, 
-        alertMessage,
-        [{ text: 'Got it!' }]
+        '✅ OTP Generated!', 
+        `Your OTP has been generated.\n\n🔢 YOUR OTP: ${result.otp}\n\n⏰ Valid for 10 minutes\n\n💡 Also check browser console for details`,
+        [{ text: 'Continue' }]
       );
     } catch (error) {
       Alert.alert('Error', error.message);

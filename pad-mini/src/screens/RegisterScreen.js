@@ -74,17 +74,13 @@ export default function RegisterScreen({ navigation, route }) {
 
     setLoading(true);
     try {
-      // TODO: Implement Firebase registration
-      // For now, simulate registration and move to verification
-      setTimeout(() => {
-        setLoading(false);
-        navigation.navigate('Verification', { 
-          userData: formData,
-          genderVerified: genderVerified,
-          verificationData: verificationData,
-          pendingReview: pendingReview
-        });
-      }, 2000);
+      setLoading(false);
+      navigation.navigate('OTPRegister', { 
+        userData: formData,
+        genderVerified: genderVerified,
+        verificationData: verificationData,
+        pendingReview: pendingReview
+      });
     } catch (error) {
       setLoading(false);
       Alert.alert('Registration Error', error.message);
